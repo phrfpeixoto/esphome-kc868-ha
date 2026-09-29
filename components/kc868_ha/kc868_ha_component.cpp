@@ -8,6 +8,7 @@ namespace esphome {
 
     void KC868HaComponent::setup() {
       this->last_rx_ms_ = millis();
+      ESP_LOGCONFIG(TAG, "KC868-HA code version: 2026.09.29.1");
       ESP_LOGD(TAG, "KC868HaComponent::setup");
     }
 
