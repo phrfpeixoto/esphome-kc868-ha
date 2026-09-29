@@ -4,11 +4,12 @@ more information, you can check with KinCony's webpage: https://www.kincony.com
 The optional `tx_quiet_time` setting controls how long the bus must have no new
 RX activity before a queued frame can be transmitted. It defaults to `100ms`.
 New RX bytes restart the wait; RX processing continues while TX is queued.
-The TX queue holds up to eight pending outputs, keyed by
+The TX queue holds at most one pending state per logical output, keyed by
 `(switch_adapter_addr, bind_output)`. Repeated updates replace the pending desired
-state for that output. When a new output exceeds the limit, the oldest pending
-output is dropped with a warning. Full output-state frames are built at send time
-to avoid replaying stale states for other outputs.
+state for that output, naturally limiting the queue to the distinct outputs among
+the registered switches. There is no fixed queue limit or capacity-based discard.
+Full output-state frames are built at send time to avoid replaying stale states
+for other outputs.
 
 After each UART write completes, `tx_guard_time` controls the delay before another
 frame can be sent. This optional setting defaults to `100ms`. Both the guard and

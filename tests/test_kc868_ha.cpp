@@ -57,11 +57,20 @@ int main() {
     f.outputs[0].write_state(true); f.outputs[1].write_state(true);
     f.outputs[0].write_state(false); assert(f.component.queued()==2);
   }
-  { // Coalescing at capacity must not evict an unrelated output.
+  { // All registered outputs remain pending, including those beyond the old limit of eight.
     Fixture f;
-    for(int i=0;i<8;i++) f.outputs[i].write_state(true);
-    f.outputs[0].write_state(false); assert(f.component.queued()==8 && f.component.first_output()==1);
-    f.outputs[8].write_state(true); assert(f.component.queued()==8 && f.component.first_output()==2);
+    for(int i=0;i<10;i++) f.outputs[i].write_state(true);
+    assert(f.component.queued()==10 && f.component.first_output()==1);
+    f.outputs[0].write_state(false);
+    f.outputs[0].write_state(true);
+    assert(f.component.queued()==10 && f.component.first_output()==1);
+    for(int i=0;i<10;i++) {
+      assert(f.component.first_output()==i+1);
+      f.tick(100*(i+1));
+      assert(f.uart.tx.size()==static_cast<size_t>(i+1));
+      assert(f.uart.tx.back()[20]==255 && f.uart.tx.back()[19]==3);
+    }
+    assert(f.component.queued()==0);
   }
   { // The guard begins after flush and applies even with zero RX quiet time.
     Fixture f; f.component.set_tx_quiet_time(0); f.uart.flush_duration=24;
@@ -127,5 +136,5 @@ int main() {
     f.tick(83); assert(f.uart.tx.empty());
     f.tick(84); assert(f.uart.tx.size()==1);
   }
-  std::cout << "PASS: coalescing, fresh bitmaps, queue bounds, TX guard, RX quiet time, CRC recovery, callbacks, rollover\n";
+  std::cout << "PASS: coalescing, fresh bitmaps, registered output retention, TX guard, RX quiet time, CRC recovery, callbacks, rollover\n";
 }

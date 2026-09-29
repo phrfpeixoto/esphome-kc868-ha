@@ -23,10 +23,6 @@ namespace esphome {
           return;
         }
       }
-      if (this->tx_queue_.size() >= MAX_TX_QUEUE) {
-        this->tx_queue_.erase(this->tx_queue_.begin());
-        ESP_LOGW(TAG, "TX queue full, dropping oldest frame");
-      }
       this->tx_queue_.push_back({output, state});
       ESP_LOGD(TAG, "TX queued (%u pending)", static_cast<unsigned>(this->tx_queue_.size()));
     }
@@ -61,22 +57,11 @@ namespace esphome {
           continue;
         }
 
-        for (auto & element : this->binary_sensors_) {
-          ESP_LOGD(TAG, "dump kc868_ha config, target_relay_controller_addr=%d, switch_adapter_addr=%d, bind_output=%d", 
-              element->get_target_relay_controller_addr(),
-              element->get_switch_adapter_addr(),
-              element->get_bind_output());
-        }
-
         for (auto & element : this->binary_sensors_)
           {
             if (element->get_target_relay_controller_addr() == data[0] &&
                 element->get_switch_adapter_addr() == data[3]) {
 
-              ESP_LOGD(TAG, "found a kc868_ha board, target_relay_controller_addr=%d, switch_adapter_addr=%d, bind_output=%d", 
-              element->get_target_relay_controller_addr(),
-              element->get_switch_adapter_addr(),
-              element->get_bind_output());
               for (int i = 7; i <= 17; i += 2) {
                 if (data[i] == (element->get_bind_output() + 100)) {
                   if (data[i+1] == 1) {

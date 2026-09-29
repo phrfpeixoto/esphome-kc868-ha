@@ -83,7 +83,6 @@ namespace esphome {
 
     protected:
       uint32_t tx_quiet_time_ms_{100};
-      static constexpr size_t MAX_TX_QUEUE = 8;
       uint32_t tx_guard_time_ms_{100};
       struct PendingOutput {
         KC868HaSwitch *output;
