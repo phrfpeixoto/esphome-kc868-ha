@@ -44,6 +44,7 @@ namespace esphome {
 
       void setup() override;
       void write_state(bool state) override;
+      std::vector<uint8_t> build_tx_frame(bool state);
       void dump_config() override;
       void set_switches(std::vector<kc868_ha::KC868HaSwitch *>* switches_)  { this->switches_ = switches_; };
 
@@ -76,17 +77,21 @@ namespace esphome {
       void loop() override;
       void dump_config() override;
 
-      void enqueue_tx(const uint8_t *data, size_t length);
+      void enqueue_tx(KC868HaSwitch *output, bool state);
       void set_tx_quiet_time(uint32_t quiet_time_ms) { this->tx_quiet_time_ms_ = quiet_time_ms; }
 
     protected:
       uint32_t tx_quiet_time_ms_{100};
       static constexpr size_t MAX_TX_QUEUE = 8;
-      void observe_rx_activity_();
+      struct PendingOutput {
+        KC868HaSwitch *output;
+        bool state;
+      };
       uint32_t last_rx_ms_{0};
       size_t pending_rx_bytes_{0};
+      void observe_rx_activity_();
       bool tx_deferred_logged_{false};
-      std::vector<std::vector<uint8_t>> tx_queue_;
+      std::vector<PendingOutput> tx_queue_;
       uart::UARTComponent *uart_;
       uint8_t target_relay_controller_addr_;
       uint8_t switch_adapter_addr_;

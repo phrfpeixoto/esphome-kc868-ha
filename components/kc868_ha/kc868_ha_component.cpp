@@ -20,12 +20,23 @@ namespace esphome {
       this->pending_rx_bytes_ = pending;
     }
 
-    void KC868HaComponent::enqueue_tx(const uint8_t *data, size_t length) {
+    void KC868HaComponent::enqueue_tx(KC868HaSwitch *output, bool state) {
+      for (auto &pending : this->tx_queue_) {
+        if (pending.output->get_switch_adapter_addr() == output->get_switch_adapter_addr() &&
+            pending.output->get_bind_output() == output->get_bind_output()) {
+          pending.output = output;
+          pending.state = state;
+          ESP_LOGD(TAG, "TX coalesced for adapter %u, output %u",
+                   static_cast<unsigned>(output->get_switch_adapter_addr()),
+                   static_cast<unsigned>(output->get_bind_output()));
+          return;
+        }
+      }
       if (this->tx_queue_.size() >= MAX_TX_QUEUE) {
         this->tx_queue_.erase(this->tx_queue_.begin());
         ESP_LOGW(TAG, "TX queue full, dropping oldest frame");
       }
-      this->tx_queue_.emplace_back(data, data + length);
+      this->tx_queue_.push_back({output, state});
       ESP_LOGD(TAG, "TX queued (%u pending)", static_cast<unsigned>(this->tx_queue_.size()));
     }
 
@@ -105,12 +116,15 @@ namespace esphome {
         return;
       }
 
-      auto &frame = this->tx_queue_.front();
+      // Construct the full bitmap now, so other outputs cannot be reverted by
+      // a snapshot captured before their most recent desired state changed.
+      const auto pending = this->tx_queue_.front();
+      this->tx_queue_.erase(this->tx_queue_.begin());
+      auto frame = pending.output->build_tx_frame(pending.state);
       ESP_LOGD(TAG, "TX sending after quiet period");
       this->write_array(frame.data(), frame.size());
       this->flush();
       ESP_LOGD(TAG, "uart bus send %s", format_uart_data(frame.data(), frame.size()));
-      this->tx_queue_.erase(this->tx_queue_.begin());
       this->tx_deferred_logged_ = false;
     }
 
@@ -143,6 +157,11 @@ namespace esphome {
     }
 
     void KC868HaSwitch::write_state(bool state) {
+      this->parent_->enqueue_tx(this, state);
+      this->publish_state(state);
+    }
+
+    std::vector<uint8_t> KC868HaSwitch::build_tx_frame(bool state) {
 
       uint8_t data[21] = {  this->get_target_relay_controller_addr(), 0x03, 0x12, 0x55, 0xBB,
                             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -180,8 +199,7 @@ namespace esphome {
                                data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19], data[20],
                                crc_h, crc_l};
 
-      this->parent_->enqueue_tx(uart_data, sizeof(uart_data));
-      this->publish_state(state);
+      return std::vector<uint8_t>(uart_data, uart_data + sizeof(uart_data));
     }
 
     uint16_t crc16(uint8_t *data, uint8_t length) {

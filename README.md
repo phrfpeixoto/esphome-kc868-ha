@@ -4,7 +4,11 @@ more information, you can check with KinCony's webpage: https://www.kincony.com
 The optional `tx_quiet_time` setting controls how long the bus must have no new
 RX activity before a queued frame can be transmitted. It defaults to `100ms`.
 New RX bytes restart the wait; RX processing continues while TX is queued.
-The TX queue holds up to eight frames and drops the oldest with a warning when full.
+The TX queue holds up to eight pending outputs, keyed by
+`(switch_adapter_addr, bind_output)`. Repeated updates replace the pending desired
+state for that output. When a new output exceeds the limit, the oldest pending
+output is dropped with a warning. Full output-state frames are built at send time
+to avoid replaying stale states for other outputs.
 
 ```yaml
 kc868_ha:
@@ -12,6 +16,10 @@ kc868_ha:
 ```
 
 # Examples
+
+Host-side protocol regression tests can be run with `python3 tests/run_host_tests.py`
+(requires a C++17 compiler). These use UART doubles and do not replace firmware
+compilation or RS485 hardware testing.
 
 ## An ESP32 board connected to a KC868_HA board
 ```yaml
