@@ -116,6 +116,12 @@ namespace esphome {
         return;
       }
 
+      if (this->tx_guard_active_) {
+        if (static_cast<uint32_t>(millis() - this->last_tx_ms_) < this->tx_guard_time_ms_)
+          return;
+        this->tx_guard_active_ = false;
+      }
+
       // Construct the full bitmap now, so other outputs cannot be reverted by
       // a snapshot captured before their most recent desired state changed.
       const auto pending = this->tx_queue_.front();
@@ -124,6 +130,9 @@ namespace esphome {
       ESP_LOGD(TAG, "TX sending after quiet period");
       this->write_array(frame.data(), frame.size());
       this->flush();
+      this->last_tx_ms_ = millis();
+      this->tx_guard_active_ = true;
+      ESP_LOGD(TAG, "TX guard started (%u ms)", static_cast<unsigned>(this->tx_guard_time_ms_));
       ESP_LOGD(TAG, "uart bus send %s", format_uart_data(frame.data(), frame.size()));
       this->tx_deferred_logged_ = false;
     }
@@ -131,6 +140,7 @@ namespace esphome {
     void KC868HaComponent::dump_config(){
       ESP_LOGCONFIG(TAG, "KC868HaComponent::dump_config");
       ESP_LOGCONFIG(TAG, "  TX quiet time: %u ms", static_cast<unsigned>(this->tx_quiet_time_ms_));
+      ESP_LOGCONFIG(TAG, "  TX guard time: %u ms", static_cast<unsigned>(this->tx_guard_time_ms_));
     }
 
     void KC868HaBinarySensor::setup() {

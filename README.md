@@ -10,9 +10,16 @@ state for that output. When a new output exceeds the limit, the oldest pending
 output is dropped with a warning. Full output-state frames are built at send time
 to avoid replaying stale states for other outputs.
 
+After each UART write completes, `tx_guard_time` controls the delay before another
+frame can be sent. This optional setting defaults to `100ms`. Both the guard and
+`tx_quiet_time` must have elapsed
+before the next transmission. RX activity during the guard restarts the RX quiet
+timer, and RX processing continues throughout the wait.
+
 ```yaml
 kc868_ha:
   tx_quiet_time: 150ms
+  tx_guard_time: 100ms
 ```
 
 # Examples

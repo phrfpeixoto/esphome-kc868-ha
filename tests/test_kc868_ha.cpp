@@ -43,6 +43,7 @@ int main() {
     assert(f.component.queued()==2 && f.uart.tx.empty());
     f.tick(99); assert(f.uart.tx.empty());
     f.tick(100); assert(f.uart.tx.size()==1 && f.uart.tx[0][20]==2);
+    f.tick(100); f.tick(199); assert(f.uart.tx.size()==1);
     f.tick(200); assert(f.uart.tx.size()==2 && f.uart.tx[1][20]==2);
     for(auto &frame:f.uart.tx) {
       assert(frame.size()==23); auto crc=crc16(frame.data(),21);
@@ -60,6 +61,46 @@ int main() {
     for(int i=0;i<8;i++) f.outputs[i].write_state(true);
     f.outputs[0].write_state(false); assert(f.component.queued()==8 && f.component.first_output()==1);
     f.outputs[8].write_state(true); assert(f.component.queued()==8 && f.component.first_output()==2);
+  }
+  { // The guard begins after flush and applies even with zero RX quiet time.
+    Fixture f; f.component.set_tx_quiet_time(0); f.uart.flush_duration=24;
+    f.outputs[0].write_state(true); f.outputs[1].write_state(true);
+    f.tick(0); assert(now==24 && f.uart.tx.size()==1);
+    f.tick(123); assert(f.uart.tx.size()==1);
+    f.tick(124); assert(f.uart.tx.size()==2);
+  }
+  { // A configured guard is measured from flush completion, independently of RX quiet time.
+    Fixture f; f.component.set_tx_guard_time(250); f.uart.flush_duration=24;
+    f.outputs[0].write_state(true); f.outputs[1].write_state(true);
+    f.tick(100); assert(now==124 && f.uart.tx.size()==1);
+    f.receive(event(1)); f.tick(150); assert(f.sensor.updates==1);
+    f.tick(250); f.tick(373); assert(f.uart.tx.size()==1);
+    f.tick(374); assert(f.uart.tx.size()==2);
+  }
+  { // RX during the guard is delivered immediately and extends the RX wait.
+    Fixture f; f.component.set_tx_quiet_time(250);
+    f.outputs[0].write_state(true); f.outputs[1].write_state(true); f.tick(250);
+    f.receive(event(1)); f.tick(300); assert(f.sensor.state && f.sensor.updates==1);
+    f.receive(event(2)); f.tick(340); assert(!f.sensor.state && f.sensor.updates==2);
+    f.tick(589); assert(f.uart.tx.size()==1); f.tick(590); assert(f.uart.tx.size()==2);
+  }
+  { // RX callbacks can enqueue/coalesce commands without disrupting parsing.
+    Fixture f; f.sensor.on_state=[&](bool state){f.outputs[0].write_state(state);};
+    f.receive(event(1)); f.receive(event(2)); f.tick(100);
+    assert(f.sensor.updates==2 && f.component.queued()==1 && f.uart.tx.empty());
+    f.tick(200); assert(f.uart.tx.size()==1 && f.uart.tx[0][20]==0);
+  }
+  { // Guard and RX elapsed-time arithmetic survive millis rollover.
+    Fixture f; f.component.set_tx_quiet_time(0);
+    f.outputs[0].write_state(true); f.outputs[1].write_state(true);
+    f.tick(0xfffffff0U); f.tick(83); assert(f.uart.tx.size()==1);
+    f.tick(84); assert(f.uart.tx.size()==2);
+  }
+  { // RX observed before rollover still requires the complete quiet period.
+    Fixture f; f.outputs[0].write_state(true);
+    f.receive({255}); f.tick(0xfffffff0U);
+    f.tick(83); assert(f.uart.tx.empty());
+    f.tick(84); assert(f.uart.tx.size()==1);
   }
   std::cout << "PASS: protocol regression tests\n";
 }

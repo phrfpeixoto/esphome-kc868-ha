@@ -79,15 +79,19 @@ namespace esphome {
 
       void enqueue_tx(KC868HaSwitch *output, bool state);
       void set_tx_quiet_time(uint32_t quiet_time_ms) { this->tx_quiet_time_ms_ = quiet_time_ms; }
+      void set_tx_guard_time(uint32_t guard_time_ms) { this->tx_guard_time_ms_ = guard_time_ms; }
 
     protected:
       uint32_t tx_quiet_time_ms_{100};
       static constexpr size_t MAX_TX_QUEUE = 8;
+      uint32_t tx_guard_time_ms_{100};
       struct PendingOutput {
         KC868HaSwitch *output;
         bool state;
       };
       uint32_t last_rx_ms_{0};
+      uint32_t last_tx_ms_{0};
+      bool tx_guard_active_{false};
       size_t pending_rx_bytes_{0};
       void observe_rx_activity_();
       bool tx_deferred_logged_{false};
