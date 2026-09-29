@@ -77,9 +77,10 @@ namespace esphome {
       void dump_config() override;
 
       void enqueue_tx(const uint8_t *data, size_t length);
+      void set_tx_quiet_time(uint32_t quiet_time_ms) { this->tx_quiet_time_ms_ = quiet_time_ms; }
 
     protected:
-      static constexpr uint32_t TX_QUIET_TIME_MS = 100;
+      uint32_t tx_quiet_time_ms_{100};
       static constexpr size_t MAX_TX_QUEUE = 8;
       void observe_rx_activity_();
       uint32_t last_rx_ms_{0};

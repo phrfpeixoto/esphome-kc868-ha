@@ -97,7 +97,7 @@ namespace esphome {
       this->observe_rx_activity_();
       if (this->tx_queue_.empty())
         return;
-      if (static_cast<uint32_t>(millis() - this->last_rx_ms_) < TX_QUIET_TIME_MS) {
+      if (static_cast<uint32_t>(millis() - this->last_rx_ms_) < this->tx_quiet_time_ms_) {
         if (!this->tx_deferred_logged_) {
           ESP_LOGD(TAG, "TX deferred because bus is active");
           this->tx_deferred_logged_ = true;
@@ -116,6 +116,7 @@ namespace esphome {
 
     void KC868HaComponent::dump_config(){
       ESP_LOGCONFIG(TAG, "KC868HaComponent::dump_config");
+      ESP_LOGCONFIG(TAG, "  TX quiet time: %u ms", static_cast<unsigned>(this->tx_quiet_time_ms_));
     }
 
     void KC868HaBinarySensor::setup() {

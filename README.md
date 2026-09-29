@@ -1,5 +1,16 @@
 # Esphome KC868-HA Component
 more information, you can check with KinCony's webpage: https://www.kincony.com
+
+The optional `tx_quiet_time` setting controls how long the bus must have no new
+RX activity before a queued frame can be transmitted. It defaults to `100ms`.
+New RX bytes restart the wait; RX processing continues while TX is queued.
+The TX queue holds up to eight frames and drops the oldest with a warning when full.
+
+```yaml
+kc868_ha:
+  tx_quiet_time: 150ms
+```
+
 # Examples
 
 ## An ESP32 board connected to a KC868_HA board
