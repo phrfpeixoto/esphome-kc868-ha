@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "esphome.h"
 
 #include "esphome/core/component.h"
@@ -9,6 +11,8 @@
 
 namespace esphome {
   namespace kc868_ha {
+
+    class KC868HaComponent;
 
     class KC868HaBinarySensor : public Component, public binary_sensor::BinarySensor {
     public:
@@ -29,6 +33,7 @@ namespace esphome {
 
     class KC868HaSwitch : public Component, public switch_::Switch {
     public:
+      void set_parent(KC868HaComponent *parent) { this->parent_ = parent; }
       void set_uart(uart::UARTComponent *uartComponent) { this->uart_ = uartComponent;};
       void set_target_relay_controller_addr(uint8_t addr) { this->target_relay_controller_addr_=addr; };
       uint8_t get_target_relay_controller_addr() { return this->target_relay_controller_addr_; };
@@ -43,6 +48,7 @@ namespace esphome {
       void set_switches(std::vector<kc868_ha::KC868HaSwitch *>* switches_)  { this->switches_ = switches_; };
 
     protected:
+      KC868HaComponent *parent_{nullptr};
       uart::UARTComponent *uart_;
       uint8_t target_relay_controller_addr_;
       uint8_t switch_adapter_addr_;
@@ -61,6 +67,7 @@ namespace esphome {
       //uint8_t get_switch_adapter_addr() { return this->switch_adapter_addr_; };
       void register_binary_sensor(kc868_ha::KC868HaBinarySensor *obj)  { this->binary_sensors_.push_back(obj); };
       void register_switch(kc868_ha::KC868HaSwitch *obj)  {
+        obj->set_parent(this);
         obj->set_uart(this->uart_);
         obj->set_switches(&(this->switches_));
         this->switches_.push_back(obj);
@@ -69,7 +76,16 @@ namespace esphome {
       void loop() override;
       void dump_config() override;
 
+      void enqueue_tx(const uint8_t *data, size_t length);
+
     protected:
+      static constexpr uint32_t TX_QUIET_TIME_MS = 100;
+      static constexpr size_t MAX_TX_QUEUE = 8;
+      void observe_rx_activity_();
+      uint32_t last_rx_ms_{0};
+      size_t pending_rx_bytes_{0};
+      bool tx_deferred_logged_{false};
+      std::vector<std::vector<uint8_t>> tx_queue_;
       uart::UARTComponent *uart_;
       uint8_t target_relay_controller_addr_;
       uint8_t switch_adapter_addr_;

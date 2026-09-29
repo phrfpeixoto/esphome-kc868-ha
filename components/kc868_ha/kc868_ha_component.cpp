@@ -7,16 +7,38 @@ namespace esphome {
     static const char* const TAG = "kc868_ha";
 
     void KC868HaComponent::setup() {
+      this->last_rx_ms_ = millis();
       ESP_LOGD(TAG, "KC868HaComponent::setup");
     }
 
+    void KC868HaComponent::observe_rx_activity_() {
+      // Partial frames remain in the UART buffer: only newly observed bytes
+      // restart the quiet period, not the same unread fragment on every loop.
+      const size_t pending = this->available();
+      if (pending > this->pending_rx_bytes_)
+        this->last_rx_ms_ = millis();
+      this->pending_rx_bytes_ = pending;
+    }
+
+    void KC868HaComponent::enqueue_tx(const uint8_t *data, size_t length) {
+      if (this->tx_queue_.size() >= MAX_TX_QUEUE) {
+        this->tx_queue_.erase(this->tx_queue_.begin());
+        ESP_LOGW(TAG, "TX queue full, dropping oldest frame");
+      }
+      this->tx_queue_.emplace_back(data, data + length);
+      ESP_LOGD(TAG, "TX queued (%u pending)", static_cast<unsigned>(this->tx_queue_.size()));
+    }
+
     void KC868HaComponent::loop() {
+      this->observe_rx_activity_();
       while(available() >= 21) {
         uint8_t data[21];
         for (int i = 0; i <= 20; i++) {
           uint8_t c = read();
+          this->last_rx_ms_ = millis();
           data[i] = c;
         }
+        this->pending_rx_bytes_ = 0;
 
         ESP_LOGD(TAG, "uart bus receive %s", format_uart_data(data, 21));
 
@@ -36,6 +58,7 @@ namespace esphome {
 
           while(available() > 0) {
             read();
+            this->last_rx_ms_ = millis();
           }
 
           return;
@@ -69,6 +92,26 @@ namespace esphome {
             }
           }
       }
+
+      // Check again in case bytes arrived while processing RX callbacks.
+      this->observe_rx_activity_();
+      if (this->tx_queue_.empty())
+        return;
+      if (static_cast<uint32_t>(millis() - this->last_rx_ms_) < TX_QUIET_TIME_MS) {
+        if (!this->tx_deferred_logged_) {
+          ESP_LOGD(TAG, "TX deferred because bus is active");
+          this->tx_deferred_logged_ = true;
+        }
+        return;
+      }
+
+      auto &frame = this->tx_queue_.front();
+      ESP_LOGD(TAG, "TX sending after quiet period");
+      this->write_array(frame.data(), frame.size());
+      this->flush();
+      ESP_LOGD(TAG, "uart bus send %s", format_uart_data(frame.data(), frame.size()));
+      this->tx_queue_.erase(this->tx_queue_.begin());
+      this->tx_deferred_logged_ = false;
     }
 
     void KC868HaComponent::dump_config(){
@@ -136,9 +179,7 @@ namespace esphome {
                                data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19], data[20],
                                crc_h, crc_l};
 
-      this->uart_->write_array(uart_data, sizeof(uart_data));
-
-      ESP_LOGD(TAG, "uart bus send %s", format_uart_data(uart_data, 23));
+      this->parent_->enqueue_tx(uart_data, sizeof(uart_data));
       this->publish_state(state);
     }
 
