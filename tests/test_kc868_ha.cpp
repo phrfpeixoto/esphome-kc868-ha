@@ -8,6 +8,7 @@ class TestComponent : public KC868HaComponent {
  public:
   using KC868HaComponent::KC868HaComponent;
   size_t queued() const { return tx_queue_.size(); }
+  size_t buffered() const { return rx_buffer_.size(); }
   uint8_t first_output() const { return tx_queue_.front().output->get_bind_output(); }
 };
 struct Fixture {
@@ -84,6 +85,30 @@ int main() {
     f.receive(event(2)); f.tick(340); assert(!f.sensor.state && f.sensor.updates==2);
     f.tick(589); assert(f.uart.tx.size()==1); f.tick(590); assert(f.uart.tx.size()==2);
   }
+  { // Noise followed by fragmented and consecutive valid frames resynchronizes.
+    Fixture f; auto press=event(1); f.receive({255,255,17});
+    f.receive(std::vector<uint8_t>(press.begin(),press.begin()+10)); f.tick(1);
+    assert(f.sensor.updates==0 && f.component.buffered()==13);
+    f.receive(std::vector<uint8_t>(press.begin()+10,press.end())); f.receive(event(2)); f.tick(2);
+    assert(f.sensor.updates==2 && !f.sensor.state && f.component.buffered()==0);
+  }
+  { // Corruption, a deleted byte, and an inserted byte must not lose following frames.
+    for(int mode=0;mode<3;mode++) {
+      Fixture f; auto broken=event(1);
+      if(mode==0) broken[19]^=1;
+      if(mode==1) broken.erase(broken.begin()+8);
+      if(mode==2) broken.insert(broken.begin()+8,255);
+      f.receive(broken); f.receive(event(2)); f.tick(1);
+      assert(f.sensor.updates==1 && !f.sensor.state && f.component.buffered()==0);
+    }
+  }
+  { // Persistent noise uses bounded storage; partial RX restarts the quiet timer.
+    Fixture f; f.outputs[0].write_state(true);
+    f.receive(std::vector<uint8_t>(4096,255)); f.tick(50);
+    assert(f.component.buffered()==20 && f.uart.tx.empty());
+    f.receive({255}); f.tick(149); f.tick(248); assert(f.uart.tx.empty());
+    f.tick(249); assert(f.uart.tx.size()==1);
+  }
   { // RX callbacks can enqueue/coalesce commands without disrupting parsing.
     Fixture f; f.sensor.on_state=[&](bool state){f.outputs[0].write_state(state);};
     f.receive(event(1)); f.receive(event(2)); f.tick(100);
@@ -102,5 +127,5 @@ int main() {
     f.tick(83); assert(f.uart.tx.empty());
     f.tick(84); assert(f.uart.tx.size()==1);
   }
-  std::cout << "PASS: protocol regression tests\n";
+  std::cout << "PASS: coalescing, fresh bitmaps, queue bounds, TX guard, RX quiet time, CRC recovery, callbacks, rollover\n";
 }

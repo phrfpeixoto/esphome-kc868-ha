@@ -16,6 +16,10 @@ frame can be sent. This optional setting defaults to `100ms`. Both the guard and
 before the next transmission. RX activity during the guard restarts the RX quiet
 timer, and RX processing continues throughout the wait.
 
+The RX parser retains partial frames between loop calls. On a CRC mismatch it
+discards one byte and retries the next 21-byte window, preserving subsequent
+valid frames instead of clearing the UART RX buffer.
+
 ```yaml
 kc868_ha:
   tx_quiet_time: 150ms

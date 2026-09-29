@@ -11,15 +11,6 @@ namespace esphome {
       ESP_LOGD(TAG, "KC868HaComponent::setup");
     }
 
-    void KC868HaComponent::observe_rx_activity_() {
-      // Partial frames remain in the UART buffer: only newly observed bytes
-      // restart the quiet period, not the same unread fragment on every loop.
-      const size_t pending = this->available();
-      if (pending > this->pending_rx_bytes_)
-        this->last_rx_ms_ = millis();
-      this->pending_rx_bytes_ = pending;
-    }
-
     void KC868HaComponent::enqueue_tx(KC868HaSwitch *output, bool state) {
       for (auto &pending : this->tx_queue_) {
         if (pending.output->get_switch_adapter_addr() == output->get_switch_adapter_addr() &&
@@ -41,15 +32,15 @@ namespace esphome {
     }
 
     void KC868HaComponent::loop() {
-      this->observe_rx_activity_();
-      while(available() >= 21) {
-        uint8_t data[21];
-        for (int i = 0; i <= 20; i++) {
-          uint8_t c = read();
-          this->last_rx_ms_ = millis();
-          data[i] = c;
-        }
-        this->pending_rx_bytes_ = 0;
+      while (this->available() > 0) {
+        uint8_t byte;
+        if (!this->read_byte(&byte))
+          break;
+        this->last_rx_ms_ = millis();
+        this->rx_buffer_.push_back(byte);
+        if (this->rx_buffer_.size() < 21)
+          continue;
+        auto *data = this->rx_buffer_.data();
 
         ESP_LOGD(TAG, "uart bus receive %s", format_uart_data(data, 21));
 
@@ -65,14 +56,9 @@ namespace esphome {
         ESP_LOGD(TAG, "uart crc=%x:%x, calc crc=%x:%x", data[19], data[20], crc_h, crc_l);
 
         if (!(data[19] == crc_h && data[20] == crc_l)) {
-          ESP_LOGW(TAG, "crc check failed. ignore data");
-
-          while(available() > 0) {
-            read();
-            this->last_rx_ms_ = millis();
-          }
-
-          return;
+          ESP_LOGW(TAG, "CRC check failed, discarding one RX byte");
+          this->rx_buffer_.erase(this->rx_buffer_.begin());
+          continue;
         }
 
         for (auto & element : this->binary_sensors_) {
@@ -102,10 +88,14 @@ namespace esphome {
               }
             }
           }
+        this->rx_buffer_.clear();
       }
 
-      // Check again in case bytes arrived while processing RX callbacks.
-      this->observe_rx_activity_();
+      // Defer if a byte arrived after the RX loop or a read could not complete.
+      if (this->available() > 0) {
+        this->last_rx_ms_ = millis();
+        return;
+      }
       if (this->tx_queue_.empty())
         return;
       if (static_cast<uint32_t>(millis() - this->last_rx_ms_) < this->tx_quiet_time_ms_) {
