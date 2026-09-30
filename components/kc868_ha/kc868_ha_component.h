@@ -77,23 +77,23 @@ namespace esphome {
       void loop() override;
       void dump_config() override;
 
-      void enqueue_tx(KC868HaSwitch *output, bool state);
+      void enqueue_tx(KC868HaSwitch *output);
       void set_tx_quiet_time(uint32_t quiet_time_ms) { this->tx_quiet_time_ms_ = quiet_time_ms; }
       void set_tx_guard_time(uint32_t guard_time_ms) { this->tx_guard_time_ms_ = guard_time_ms; }
 
     protected:
       uint32_t tx_quiet_time_ms_{100};
       uint32_t tx_guard_time_ms_{100};
-      struct PendingOutput {
-        KC868HaSwitch *output;
-        bool state;
+      struct PendingController {
+        uint8_t target_relay_controller_addr;
+        KC868HaSwitch *representative_output;
       };
       uint32_t last_rx_ms_{0};
       uint32_t last_tx_ms_{0};
-      bool tx_guard_active_{false};
+      bool has_tx_occurred_{false};
       std::vector<uint8_t> rx_buffer_;
       bool tx_deferred_logged_{false};
-      std::vector<PendingOutput> tx_queue_;
+      std::vector<PendingController> tx_queue_;
       uart::UARTComponent *uart_;
       uint8_t target_relay_controller_addr_;
       uint8_t switch_adapter_addr_;

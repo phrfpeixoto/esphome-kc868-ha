@@ -11,20 +11,17 @@ namespace esphome {
       ESP_LOGD(TAG, "KC868HaComponent::setup");
     }
 
-    void KC868HaComponent::enqueue_tx(KC868HaSwitch *output, bool state) {
-      for (auto &pending : this->tx_queue_) {
-        if (pending.output->get_switch_adapter_addr() == output->get_switch_adapter_addr() &&
-            pending.output->get_bind_output() == output->get_bind_output()) {
-          pending.output = output;
-          pending.state = state;
-          ESP_LOGD(TAG, "TX coalesced for adapter %u, output %u",
-                   static_cast<unsigned>(output->get_switch_adapter_addr()),
-                   static_cast<unsigned>(output->get_bind_output()));
+    void KC868HaComponent::enqueue_tx(KC868HaSwitch *output) {
+      const uint8_t target = output->get_target_relay_controller_addr();
+      for (const auto &pending : this->tx_queue_) {
+        if (pending.target_relay_controller_addr == target) {
+          ESP_LOGD(TAG, "TX coalesced for target %u", static_cast<unsigned>(target));
           return;
         }
       }
-      this->tx_queue_.push_back({output, state});
-      ESP_LOGD(TAG, "TX queued (%u pending)", static_cast<unsigned>(this->tx_queue_.size()));
+      this->tx_queue_.push_back({target, output});
+      ESP_LOGD(TAG, "TX queued for target %u (%u pending)", static_cast<unsigned>(target),
+               static_cast<unsigned>(this->tx_queue_.size()));
     }
 
     void KC868HaComponent::loop() {
@@ -91,22 +88,21 @@ namespace esphome {
         return;
       }
 
-      if (this->tx_guard_active_) {
-        if (static_cast<uint32_t>(millis() - this->last_tx_ms_) < this->tx_guard_time_ms_)
-          return;
-        this->tx_guard_active_ = false;
-      }
+      if (this->has_tx_occurred_ &&
+          static_cast<uint32_t>(millis() - this->last_tx_ms_) < this->tx_guard_time_ms_)
+        return;
 
       // Construct the full bitmap now, so other outputs cannot be reverted by
       // a snapshot captured before their most recent desired state changed.
       const auto pending = this->tx_queue_.front();
+      auto *output = pending.representative_output;
+      auto frame = output->build_tx_frame(output->state);
       this->tx_queue_.erase(this->tx_queue_.begin());
-      auto frame = pending.output->build_tx_frame(pending.state);
       ESP_LOGD(TAG, "TX sending after quiet period");
       this->write_array(frame.data(), frame.size());
       this->flush();
       this->last_tx_ms_ = millis();
-      this->tx_guard_active_ = true;
+      this->has_tx_occurred_ = true;
       ESP_LOGD(TAG, "TX guard started (%u ms)", static_cast<unsigned>(this->tx_guard_time_ms_));
       ESP_LOGD(TAG, "uart bus send %s", format_uart_data(frame.data(), frame.size()));
       this->tx_deferred_logged_ = false;
@@ -143,7 +139,7 @@ namespace esphome {
     }
 
     void KC868HaSwitch::write_state(bool state) {
-      this->parent_->enqueue_tx(this, state);
+      this->parent_->enqueue_tx(this);
       this->publish_state(state);
     }
 
