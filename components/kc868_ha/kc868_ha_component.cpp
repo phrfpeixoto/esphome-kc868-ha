@@ -8,7 +8,6 @@ namespace esphome {
 
     void KC868HaComponent::setup() {
       this->last_rx_ms_ = millis();
-      ESP_LOGCONFIG(TAG, "KC868-HA code version: 2026.09.29.1");
       ESP_LOGD(TAG, "KC868HaComponent::setup");
     }
 
@@ -115,6 +114,7 @@ namespace esphome {
 
     void KC868HaComponent::dump_config(){
       ESP_LOGCONFIG(TAG, "KC868HaComponent::dump_config");
+      ESP_LOGCONFIG(TAG, "KC868-HA code version: 2026.09.29.1");
       ESP_LOGCONFIG(TAG, "  TX quiet time: %u ms", static_cast<unsigned>(this->tx_quiet_time_ms_));
       ESP_LOGCONFIG(TAG, "  TX guard time: %u ms", static_cast<unsigned>(this->tx_guard_time_ms_));
     }
