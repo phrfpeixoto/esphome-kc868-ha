@@ -130,7 +130,11 @@ namespace esphome {
       this->publish_initial_state(false);
     }
     void KC868HaBinarySensor::dump_config(){
-      ESP_LOGCONFIG(TAG, "KC868HaBinarySensor::dump_config");
+      ESP_LOGCONFIG(TAG, "KC868HaBinarySensor::dump_config; target=%u adapter=%u output=%u",
+        this->get_target_relay_controller_addr(),
+        this->get_switch_adapter_addr(),
+        this->get_bind_output()
+      );
     }
 
     void KC868HaSwitch::setup() {
@@ -145,7 +149,11 @@ namespace esphome {
       }
     }
     void KC868HaSwitch::dump_config(){
-      ESP_LOGCONFIG(TAG, "KC868HaSwitch::dump_config");
+      ESP_LOGCONFIG(TAG, "KC868HaSwitch::dump_config; target=%u adapter=%u output=%u",
+        this->get_target_relay_controller_addr(),
+        this->get_switch_adapter_addr(),
+        this->get_bind_output()
+      );
     }
 
     void KC868HaSwitch::write_state(bool state) {
