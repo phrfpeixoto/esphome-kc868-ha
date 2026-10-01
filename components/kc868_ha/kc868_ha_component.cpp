@@ -25,17 +25,19 @@ namespace esphome {
     }
 
     void KC868HaComponent::loop() {
-      while (this->available() > 0) {
+      // Read the currently available batch before scanning it without moving bytes.
+      const size_t available_bytes = this->available();
+      for (size_t i = 0; i < available_bytes; i++) {
         uint8_t byte;
         if (!this->read_byte(&byte))
           break;
         this->last_rx_ms_ = millis();
         this->rx_buffer_.push_back(byte);
-        if (this->rx_buffer_.size() < 21)
-          continue;
-        auto *data = this->rx_buffer_.data();
+      }
 
-        ESP_LOGD(TAG, "uart bus receive %s", format_uart_data(data, 21));
+      size_t offset = 0;
+      while (this->rx_buffer_.size() - offset >= 21) {
+        auto *data = this->rx_buffer_.data() + offset;
 
         uint8_t crc_data[19] =  {
           data[0],data[1],data[2],data[3],
@@ -46,13 +48,18 @@ namespace esphome {
         uint16_t crc = crc16(crc_data, sizeof(crc_data));
         uint8_t crc_h = static_cast<uint8_t>(crc & 0x00FF);
         uint8_t crc_l = static_cast<uint8_t>((crc & 0xFF00) >> 8);
-        ESP_LOGD(TAG, "uart crc=%x:%x, calc crc=%x:%x", data[19], data[20], crc_h, crc_l);
-
         if (!(data[19] == crc_h && data[20] == crc_l)) {
-          ESP_LOGW(TAG, "CRC check failed, discarding one RX byte");
-          this->rx_buffer_.erase(this->rx_buffer_.begin());
+          offset++;
+          this->rx_discarded_bytes_++;
           continue;
         }
+
+        if (this->rx_discarded_bytes_ > 0) {
+          ESP_LOGD(TAG, "RX resynchronized after discarding %zu bytes", this->rx_discarded_bytes_);
+          this->rx_discarded_bytes_ = 0;
+        }
+        ESP_LOGD(TAG, "uart bus receive %s", format_uart_data(data, 21));
+        ESP_LOGD(TAG, "uart crc=%x:%x, calc crc=%x:%x", data[19], data[20], crc_h, crc_l);
 
         for (auto & element : this->binary_sensors_)
           {
@@ -70,8 +77,11 @@ namespace esphome {
               }
             }
           }
-        this->rx_buffer_.clear();
+        offset += 21;
       }
+      // Compact once per batch; retain any incomplete frame for the next loop.
+      if (offset > 0)
+        this->rx_buffer_.erase(this->rx_buffer_.begin(), this->rx_buffer_.begin() + offset);
 
       // Defer if a byte arrived after the RX loop or a read could not complete.
       if (this->available() > 0) {
@@ -110,7 +120,7 @@ namespace esphome {
 
     void KC868HaComponent::dump_config(){
       ESP_LOGCONFIG(TAG, "KC868HaComponent::dump_config");
-      ESP_LOGCONFIG(TAG, "KC868-HA code version: 2026.09.30.1");
+      ESP_LOGCONFIG(TAG, "KC868-HA code version: 2026.09.31.1");
       ESP_LOGCONFIG(TAG, "  TX quiet time: %u ms", static_cast<unsigned>(this->tx_quiet_time_ms_));
       ESP_LOGCONFIG(TAG, "  TX guard time: %u ms", static_cast<unsigned>(this->tx_guard_time_ms_));
     }

@@ -92,6 +92,7 @@ namespace esphome {
       uint32_t last_tx_ms_{0};
       bool has_tx_occurred_{false};
       std::vector<uint8_t> rx_buffer_;
+      size_t rx_discarded_bytes_{0};
       bool tx_deferred_logged_{false};
       std::vector<PendingController> tx_queue_;
       uart::UARTComponent *uart_;
